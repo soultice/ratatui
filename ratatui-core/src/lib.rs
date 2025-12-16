@@ -74,6 +74,7 @@ extern crate std;
 
 pub mod backend;
 pub mod buffer;
+pub mod gradient;
 pub mod layout;
 pub mod style;
 pub mod symbols;

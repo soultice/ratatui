@@ -9,6 +9,7 @@ use alloc::vec::Vec;
 
 use itertools::Itertools;
 use ratatui_core::buffer::Buffer;
+use ratatui_core::gradient::BorderGradients;
 use ratatui_core::layout::{Alignment, Rect};
 use ratatui_core::style::{Style, Styled};
 use ratatui_core::symbols::border;
@@ -233,6 +234,8 @@ pub struct Block<'a> {
     padding: Padding,
     /// Border merging strategy
     merge_borders: MergeStrategy,
+    /// Border gradients - colors to apply to each side
+    border_gradients: BorderGradients,
 }
 
 /// Defines the position of the title.
@@ -274,6 +277,12 @@ impl<'a> Block<'a> {
             style: Style::new(),
             padding: Padding::ZERO,
             merge_borders: MergeStrategy::Replace,
+            border_gradients: BorderGradients {
+                top: None,
+                left: None,
+                right: None,
+                bottom: None,
+            },
         }
     }
 
@@ -622,6 +631,35 @@ impl<'a> Block<'a> {
         self
     }
 
+    /// Sets the gradient colors for the borders.
+    ///
+    /// Each side of the border can have a gradient defined as a vector of colors. When rendering,
+    /// these colors are applied sequentially to the border characters. If a gradient is not
+    /// provided for a side, the `border_style` will be used instead.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ratatui::{
+    ///     widgets::Block,
+    ///     style::Color,
+    /// };
+    /// use ratatui_core::gradient::BorderGradients;
+    ///
+    /// let gradients = BorderGradients {
+    ///     top: Some(vec![Color::Red, Color::Yellow, Color::Green]),
+    ///     bottom: Some(vec![Color::Blue, Color::Cyan, Color::White]),
+    ///     left: None,
+    ///     right: None,
+    /// };
+    /// Block::bordered().border_gradients(gradients);
+    /// ```
+    #[must_use = "method moves the value of self and returns the modified value"]
+    pub fn border_gradients(mut self, gradients: BorderGradients) -> Self {
+        self.border_gradients = gradients;
+        self
+    }
+
     /// Defines the padding inside a `Block`.
     ///
     /// See [`Padding`] for more information.
@@ -809,79 +847,158 @@ impl Block<'_> {
         let right_inset = right - u16::from(is_replace && self.borders.contains(Borders::RIGHT));
         let bottom_inset = bottom - u16::from(is_replace && self.borders.contains(Borders::BOTTOM));
 
-        let sides = [
-            (
-                Borders::LEFT,
-                left..=left,
-                top_inset..=bottom_inset,
-                self.border_set.vertical_left,
-            ),
-            (
-                Borders::TOP,
-                left_inset..=right_inset,
-                top..=top,
-                self.border_set.horizontal_top,
-            ),
-            (
-                Borders::RIGHT,
-                right..=right,
-                top_inset..=bottom_inset,
-                self.border_set.vertical_right,
-            ),
-            (
-                Borders::BOTTOM,
-                left_inset..=right_inset,
-                bottom..=bottom,
-                self.border_set.horizontal_bottom,
-            ),
-        ];
-        for (border, x_range, y_range, symbol) in sides {
-            if self.borders.contains(border) {
-                for x in x_range {
-                    for y in y_range.clone() {
-                        buf[(x, y)]
-                            .merge_symbol(symbol, self.merge_borders)
-                            .set_style(self.border_style);
+        // Render left border
+        if self.borders.contains(Borders::LEFT) {
+            for y in top_inset..=bottom_inset {
+                let style = if let Some(ref colors) = self.border_gradients.left {
+                    if colors.is_empty() {
+                        self.border_style
+                    } else {
+                        let idx = (y as usize).min(colors.len() - 1);
+                        self.border_style.fg(colors[idx])
                     }
-                }
+                } else {
+                    self.border_style
+                };
+                buf[(left, y)]
+                    .merge_symbol(self.border_set.vertical_left, self.merge_borders)
+                    .set_style(style);
+            }
+        }
+
+        // Render top border
+        if self.borders.contains(Borders::TOP) {
+            for x in left_inset..=right_inset {
+                let style = if let Some(ref colors) = self.border_gradients.top {
+                    if colors.is_empty() {
+                        self.border_style
+                    } else {
+                        let idx = (x as usize).min(colors.len() - 1);
+                        self.border_style.fg(colors[idx])
+                    }
+                } else {
+                    self.border_style
+                };
+                buf[(x, top)]
+                    .merge_symbol(self.border_set.horizontal_top, self.merge_borders)
+                    .set_style(style);
+            }
+        }
+
+        // Render right border
+        if self.borders.contains(Borders::RIGHT) {
+            for y in top_inset..=bottom_inset {
+                let style = if let Some(ref colors) = self.border_gradients.right {
+                    if colors.is_empty() {
+                        self.border_style
+                    } else {
+                        let idx = (y as usize).min(colors.len() - 1);
+                        self.border_style.fg(colors[idx])
+                    }
+                } else {
+                    self.border_style
+                };
+                buf[(right, y)]
+                    .merge_symbol(self.border_set.vertical_right, self.merge_borders)
+                    .set_style(style);
+            }
+        }
+
+        // Render bottom border
+        if self.borders.contains(Borders::BOTTOM) {
+            for x in left_inset..=right_inset {
+                let style = if let Some(ref colors) = self.border_gradients.bottom {
+                    if colors.is_empty() {
+                        self.border_style
+                    } else {
+                        let idx = (x as usize).min(colors.len() - 1);
+                        self.border_style.fg(colors[idx])
+                    }
+                } else {
+                    self.border_style
+                };
+                buf[(x, bottom)]
+                    .merge_symbol(self.border_set.horizontal_bottom, self.merge_borders)
+                    .set_style(style);
             }
         }
     }
 
     fn render_corners(&self, area: Rect, buf: &mut Buffer) {
-        let corners = [
-            (
-                Borders::RIGHT | Borders::BOTTOM,
-                area.right() - 1,
-                area.bottom() - 1,
-                self.border_set.bottom_right,
-            ),
-            (
-                Borders::RIGHT | Borders::TOP,
-                area.right() - 1,
-                area.top(),
-                self.border_set.top_right,
-            ),
-            (
-                Borders::LEFT | Borders::BOTTOM,
-                area.left(),
-                area.bottom() - 1,
-                self.border_set.bottom_left,
-            ),
-            (
-                Borders::LEFT | Borders::TOP,
-                area.left(),
-                area.top(),
-                self.border_set.top_left,
-            ),
-        ];
+        // Bottom-right corner
+        if self.borders.contains(Borders::RIGHT | Borders::BOTTOM) {
+            let x = area.right() - 1;
+            let y = area.bottom() - 1;
+            let style = if let Some(ref colors) = self.border_gradients.bottom {
+                if colors.is_empty() {
+                    self.border_style
+                } else {
+                    let idx = (x as usize).min(colors.len() - 1);
+                    self.border_style.fg(colors[idx])
+                }
+            } else {
+                self.border_style
+            };
+            buf[(x, y)]
+                .merge_symbol(self.border_set.bottom_right, self.merge_borders)
+                .set_style(style);
+        }
 
-        for (border, x, y, symbol) in corners {
-            if self.borders.contains(border) {
-                buf[(x, y)]
-                    .merge_symbol(symbol, self.merge_borders)
-                    .set_style(self.border_style);
-            }
+        // Top-right corner
+        if self.borders.contains(Borders::RIGHT | Borders::TOP) {
+            let x = area.right() - 1;
+            let y = area.top();
+            let style = if let Some(ref colors) = self.border_gradients.top {
+                if colors.is_empty() {
+                    self.border_style
+                } else {
+                    let idx = (x as usize).min(colors.len() - 1);
+                    self.border_style.fg(colors[idx])
+                }
+            } else {
+                self.border_style
+            };
+            buf[(x, y)]
+                .merge_symbol(self.border_set.top_right, self.merge_borders)
+                .set_style(style);
+        }
+
+        // Bottom-left corner
+        if self.borders.contains(Borders::LEFT | Borders::BOTTOM) {
+            let x = area.left();
+            let y = area.bottom() - 1;
+            let style = if let Some(ref colors) = self.border_gradients.bottom {
+                if colors.is_empty() {
+                    self.border_style
+                } else {
+                    let idx = (x as usize).min(colors.len() - 1);
+                    self.border_style.fg(colors[idx])
+                }
+            } else {
+                self.border_style
+            };
+            buf[(x, y)]
+                .merge_symbol(self.border_set.bottom_left, self.merge_borders)
+                .set_style(style);
+        }
+
+        // Top-left corner
+        if self.borders.contains(Borders::LEFT | Borders::TOP) {
+            let x = area.left();
+            let y = area.top();
+            let style = if let Some(ref colors) = self.border_gradients.top {
+                if colors.is_empty() {
+                    self.border_style
+                } else {
+                    let idx = (x as usize).min(colors.len() - 1);
+                    self.border_style.fg(colors[idx])
+                }
+            } else {
+                self.border_style
+            };
+            buf[(x, y)]
+                .merge_symbol(self.border_set.top_left, self.merge_borders)
+                .set_style(style);
         }
     }
     fn render_titles(&self, area: Rect, buf: &mut Buffer) {
@@ -1340,6 +1457,12 @@ mod tests {
                 style: Style::new(),
                 padding: Padding::ZERO,
                 merge_borders: MergeStrategy::Replace,
+                border_gradients: BorderGradients {
+                    top: None,
+                    left: None,
+                    right: None,
+                    bottom: None,
+                },
             }
         );
     }
